@@ -1,0 +1,139 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mini-Chatbot</title>
+<meta name="robots" content="noindex">
+<style>
+  :root {
+    --hg: #f6f4f1; --karte: #ffffff; --text: #1f1d1b; --leise: #6b6560; --rand: #e2ddd7;
+    --akzent: #cb1726; --akzent-text: #ffffff; --bot: #f1ece6;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --hg: #171513; --karte: #221f1c; --text: #f1ede8; --leise: #a59d95; --rand: #3a3530;
+      --akzent: #e0414e; --akzent-text: #ffffff; --bot: #2d2925;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--hg); color: var(--text);
+    font: 16px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  }
+  main { max-width: 44rem; margin: 0 auto; padding: 1.5rem 1rem 2rem; }
+  h1 { font-size: 1.6rem; margin: 0 0 .25rem; }
+  .hinweis { color: var(--leise); font-size: .9rem; margin: 0 0 1rem; }
+  .chat {
+    background: var(--karte); border: 1px solid var(--rand); border-radius: 12px;
+    height: min(60vh, 32rem); overflow-y: auto; padding: 1rem; display: flex; flex-direction: column; gap: .6rem;
+  }
+  .nachricht { max-width: 85%; padding: .55rem .8rem; border-radius: 12px; white-space: pre-wrap; }
+  .bot { background: var(--bot); align-self: flex-start; border-bottom-left-radius: 4px; }
+  .du { background: var(--akzent); color: var(--akzent-text); align-self: flex-end; border-bottom-right-radius: 4px; }
+  .treffer { display: block; font-size: .8rem; color: var(--leise); margin-top: .25rem; }
+  form { display: flex; gap: .5rem; margin-top: .75rem; }
+  input[type=text] {
+    flex: 1; min-width: 0; font: inherit; padding: .6rem .8rem; border-radius: 8px;
+    border: 1px solid var(--rand); background: var(--karte); color: var(--text);
+  }
+  button {
+    font: inherit; border: 0; border-radius: 8px; padding: .6rem 1rem; cursor: pointer;
+    background: var(--akzent); color: var(--akzent-text);
+  }
+  .vorschlaege { display: flex; flex-wrap: wrap; gap: .4rem; margin-top: .75rem; }
+  .vorschlaege button {
+    background: transparent; color: var(--text); border: 1px solid var(--rand); padding: .3rem .7rem; font-size: .9rem;
+  }
+  .optionen { margin-top: .75rem; font-size: .9rem; color: var(--leise); }
+  footer { margin-top: 1.5rem; font-size: .85rem; color: var(--leise); }
+</style>
+</head>
+<body>
+<main>
+  <h1 id="titel">Mini-Chatbot</h1>
+  <p class="hinweis">Schulprojekt im Informatikunterricht. Der Bot sucht nur nach Stichwörtern und gibt gespeicherte
+    Antworten wieder – er versteht nichts und kann sich irren.</p>
+
+  <div class="chat" id="chat" aria-live="polite"></div>
+
+  <form id="formular">
+    <label for="eingabe" class="hinweis" hidden>Deine Frage</label>
+    <input type="text" id="eingabe" placeholder="Schreib eine Frage …" autocomplete="off">
+    <button type="submit">Senden</button>
+  </form>
+
+  <div class="vorschlaege" id="vorschlaege"></div>
+
+  <label class="optionen"><input type="checkbox" id="zeige-treffer"> Gefundene Stichwörter anzeigen</label>
+
+  <footer>Gebaut mit der Vorlage „Mini-Chatbot“ · Wissensbasis in <code>wissen.js</code></footer>
+</main>
+
+<script src="wissen.js"></script>
+<script>
+  // Text vereinheitlichen: klein, ä→ae, ß→ss, Satzzeichen weg – so passen „heißt“ und „heisst“ zusammen.
+  function normal(text) {
+    return ' ' + text.toLowerCase()
+      .replace(/ä/g, 'ae').replace(/ö/g, 'oe').replace(/ü/g, 'ue').replace(/ß/g, 'ss')
+      .replace(/[^a-z0-9 ]/g, ' ').replace(/\s+/g, ' ').trim() + ' ';
+  }
+
+  // Die Antwort mit den meisten passenden Stichwörtern gewinnt. Kein Treffer → „unbekannt“.
+  function antworte(frage) {
+    const f = normal(frage);
+    let beste = null, treffer = [];
+    for (const eintrag of WISSEN) {
+      const gefunden = eintrag.stichwoerter.filter((w) => f.includes(normal(w).trim()));
+      if (gefunden.length > treffer.length) { beste = eintrag; treffer = gefunden; }
+    }
+    return beste ? { text: beste.antwort, treffer } : { text: BOT.unbekannt, treffer: [] };
+  }
+
+  const chat = document.getElementById('chat');
+  const zeigeTreffer = document.getElementById('zeige-treffer');
+
+  function schreibe(text, wer, treffer) {
+    const blase = document.createElement('div');
+    blase.className = 'nachricht ' + wer;
+    blase.textContent = text;
+    if (wer === 'bot' && treffer && zeigeTreffer.checked) {
+      const info = document.createElement('span');
+      info.className = 'treffer';
+      info.textContent = treffer.length ? 'gefunden: ' + treffer.join(', ') : 'kein Stichwort gefunden';
+      blase.appendChild(info);
+    }
+    chat.appendChild(blase);
+    chat.scrollTop = chat.scrollHeight;
+  }
+
+  function frage(text) {
+    if (!text.trim()) return;
+    schreibe(text, 'du');
+    const a = antworte(text);
+    setTimeout(() => schreibe(a.text, 'bot', a.treffer), 300);
+  }
+
+  document.getElementById('titel').textContent = BOT.name;
+  document.title = BOT.name;
+  schreibe(BOT.begruessung, 'bot');
+
+  const vorschlaege = document.getElementById('vorschlaege');
+  for (const eintrag of WISSEN) {
+    const knopf = document.createElement('button');
+    knopf.type = 'button';
+    knopf.textContent = eintrag.frage;
+    knopf.addEventListener('click', () => frage(eintrag.frage));
+    vorschlaege.appendChild(knopf);
+  }
+
+  document.getElementById('formular').addEventListener('submit', (e) => {
+    e.preventDefault();
+    const eingabe = document.getElementById('eingabe');
+    frage(eingabe.value);
+    eingabe.value = '';
+    eingabe.focus();
+  });
+</script>
+</body>
+</html>
