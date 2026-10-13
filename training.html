@@ -1,0 +1,318 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mini-Chatbot mit Training</title>
+<meta name="robots" content="noindex">
+<style>
+  :root {
+    --hg: #f6f4f1; --karte: #ffffff; --text: #1f1d1b; --leise: #6b6560; --rand: #e2ddd7;
+    --akzent: #cb1726; --akzent-text: #ffffff; --bot: #f1ece6; --gut: #1f7a3f; --schlecht: #b3261e;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --hg: #171513; --karte: #221f1c; --text: #f1ede8; --leise: #a59d95; --rand: #3a3530;
+      --akzent: #e0414e; --akzent-text: #ffffff; --bot: #2d2925; --gut: #5cc483; --schlecht: #f2867e;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--hg); color: var(--text); font: 16px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  main { max-width: 52rem; margin: 0 auto; padding: 1.5rem 1rem 2rem; }
+  h1 { font-size: 1.6rem; margin: 0 0 .25rem; }
+  h2 { font-size: 1.15rem; margin: 0 0 .5rem; }
+  .hinweis { color: var(--leise); font-size: .9rem; margin: 0 0 1rem; }
+  .karte { background: var(--karte); border: 1px solid var(--rand); border-radius: 12px; padding: 1rem; margin-bottom: 1rem; }
+  .zeile { display: flex; flex-wrap: wrap; gap: .75rem 1.25rem; align-items: center; }
+  .zahl { font-size: 1.4rem; font-weight: 600; }
+  .klein { font-size: .85rem; color: var(--leise); }
+  canvas { width: 100%; height: 140px; display: block; margin-top: .75rem; border-radius: 8px; background: var(--hg); }
+  button {
+    font: inherit; border: 0; border-radius: 8px; padding: .6rem 1rem; cursor: pointer;
+    background: var(--akzent); color: var(--akzent-text);
+  }
+  button:disabled { opacity: .5; cursor: not-allowed; }
+  input[type=range] { width: 10rem; vertical-align: middle; }
+  .chat { height: min(50vh, 26rem); overflow-y: auto; display: flex; flex-direction: column; gap: .6rem; }
+  .nachricht { max-width: 85%; padding: .55rem .8rem; border-radius: 12px; white-space: pre-wrap; }
+  .bot { background: var(--bot); align-self: flex-start; border-bottom-left-radius: 4px; }
+  .du { background: var(--akzent); color: var(--akzent-text); align-self: flex-end; border-bottom-right-radius: 4px; }
+  .info { display: block; font-size: .8rem; color: var(--leise); margin-top: .25rem; }
+  form { display: flex; gap: .5rem; margin-top: .75rem; }
+  input[type=text] {
+    flex: 1; min-width: 0; font: inherit; padding: .6rem .8rem; border-radius: 8px;
+    border: 1px solid var(--rand); background: var(--karte); color: var(--text);
+  }
+  table { border-collapse: collapse; width: 100%; font-size: .9rem; }
+  td, th { text-align: left; padding: .3rem .4rem; border-bottom: 1px solid var(--rand); vertical-align: top; }
+  .ok { color: var(--gut); font-weight: 600; }
+  .falsch { color: var(--schlecht); font-weight: 600; }
+  .tabelle { overflow-x: auto; }
+  details summary { cursor: pointer; font-weight: 600; }
+  .woerter { margin: .4rem 0 .8rem; }
+  .wort { display: inline-block; border: 1px solid var(--rand); border-radius: 999px; padding: .05rem .55rem; margin: .15rem; font-size: .85rem; }
+  footer { margin-top: 1rem; font-size: .85rem; color: var(--leise); }
+  footer a { color: inherit; }
+</style>
+</head>
+<body>
+<main>
+  <h1 id="titel">Mini-Chatbot mit Training</h1>
+  <p class="hinweis">Dieser Bot lernt aus Beispielfragen (Trainingsdaten in <code>wissen.js</code>), welche Frage zu
+    welcher Antwort gehört. Er antwortet nur mit gespeicherten Sätzen – er erfindet nichts, kann sich aber irren.</p>
+
+  <section class="karte">
+    <h2>1. Trainieren</h2>
+    <div class="zeile">
+      <div><span class="zahl" id="anz-antworten">–</span><br><span class="klein">Antworten</span></div>
+      <div><span class="zahl" id="anz-training">–</span><br><span class="klein">Trainingsfragen</span></div>
+      <div><span class="zahl" id="anz-test">–</span><br><span class="klein">Testfragen</span></div>
+    </div>
+    <p class="zeile" style="margin-top:.75rem">
+      <label><input type="checkbox" id="zurueckhalten" checked> jede 5. Frage als Testfrage zurückhalten</label>
+      <label>Epochen: <input type="range" id="epochen" min="5" max="400" step="5" value="150"> <span id="epochen-wert">150</span></label>
+      <button type="button" id="trainieren">Trainieren</button>
+    </p>
+    <p class="klein" id="status">Noch nicht trainiert.</p>
+    <canvas id="kurve" width="800" height="140" aria-label="Fehler während des Trainings"></canvas>
+    <p class="klein">Die Kurve zeigt den <strong>Fehler</strong> (Loss) je Epoche: Je kleiner, desto besser passt das Modell zu den Trainingsfragen.</p>
+  </section>
+
+  <section class="karte">
+    <h2>2. Wie gut ist der Bot?</h2>
+    <div class="zeile">
+      <div><span class="zahl" id="genau-training">–</span><br><span class="klein">richtig bei Trainingsfragen</span></div>
+      <div><span class="zahl" id="genau-test">–</span><br><span class="klein">richtig bei Testfragen (nie gesehen)</span></div>
+    </div>
+    <div class="tabelle"><table id="testliste" hidden>
+      <thead><tr><th>Testfrage</th><th>erkannt als</th><th>Sicherheit</th><th></th></tr></thead>
+      <tbody></tbody>
+    </table></div>
+  </section>
+
+  <section class="karte">
+    <h2>3. Chatten</h2>
+    <div class="chat" id="chat" aria-live="polite"></div>
+    <form id="formular">
+      <input type="text" id="eingabe" placeholder="Zuerst trainieren, dann fragen …" autocomplete="off" disabled>
+      <button type="submit" id="senden" disabled>Senden</button>
+    </form>
+    <p class="klein" style="margin-top:.5rem"><label><input type="checkbox" id="zeige-info" checked> Sicherheit und erkannte Frage anzeigen</label></p>
+  </section>
+
+  <section class="karte">
+    <details id="gelernt-box">
+      <summary>4. Was hat das Modell gelernt?</summary>
+      <p class="klein">Die Wörter mit dem größten Gewicht je Antwort – an ihnen erkennt das Modell die Frage.</p>
+      <div id="gelernt"></div>
+    </details>
+  </section>
+
+  <footer>Stichwort-Bot ohne Training: <a href="index.html">index.html</a> · Wissensbasis in <code>wissen.js</code></footer>
+</main>
+
+<script src="wissen.js"></script>
+<script>
+  // ---------- Text → Merkmale ----------
+  // Ein Merkmal ist ein Wort („w:kindheit“) oder ein Stück aus drei Buchstaben („t:kin“).
+  // Die Buchstaben-Stücke helfen bei Tippfehlern und Wortformen (aufgewachsen / aufwachsen).
+  function normal(text) {
+    return text.toLowerCase()
+      .replace(/ä/g, 'ae').replace(/ö/g, 'oe').replace(/ü/g, 'ue').replace(/ß/g, 'ss')
+      .replace(/[^a-z0-9 ]/g, ' ').replace(/\s+/g, ' ').trim();
+  }
+  // Füllwörter kommen in fast jeder Frage vor und helfen nicht beim Unterscheiden – sie werden übersprungen.
+  const FUELLWOERTER = new Set(('du dich dir dein deine ich mir mich mein bist ist sind bin hast hat habt haben ihr wir '
+    + 'die der das den dem des ein eine einen einer eines und oder es man auch eigentlich gerade bitte so zu in im mit '
+    + 'von an am auf fuer mal denn noch schon').split(' '));
+  function merkmale(text) {
+    const m = new Set();
+    for (const wort of normal(text).split(' ')) {
+      if (!wort || FUELLWOERTER.has(wort)) continue;
+      m.add('w:' + wort);
+      const w = ' ' + wort + ' ';
+      for (let i = 0; i + 3 <= w.length; i++) m.add('t:' + w.slice(i, i + 3));
+    }
+    return [...m];
+  }
+
+  // ---------- Daten ----------
+  // Alle Klassen: jede Antwort aus WISSEN, dazu „weiß ich nicht“, wenn es UNBEKANNT_FRAGEN gibt.
+  const KLASSEN = WISSEN.slice();
+  if (typeof UNBEKANNT_FRAGEN !== 'undefined' && UNBEKANNT_FRAGEN.length) {
+    KLASSEN.push({ frage: '(weiß ich nicht)', fragen: UNBEKANNT_FRAGEN, antwort: BOT.unbekannt });
+  }
+  const antworten = KLASSEN.map((e) => e.antwort);
+  const titel = KLASSEN.map((e) => e.frage);
+  let training = [], test = [];
+  function teileDaten() {
+    training = []; test = [];
+    const zurueck = document.getElementById('zurueckhalten').checked;
+    KLASSEN.forEach((e, k) => {
+      const fragen = (e.fragen && e.fragen.length ? e.fragen : [e.frage]);
+      fragen.forEach((f, i) => {
+        if (zurueck && fragen.length >= 5 && i % 5 === 4) test.push({ text: f, k });
+        else training.push({ text: f, k });
+      });
+    });
+    document.getElementById('anz-antworten').textContent = WISSEN.length;
+    document.getElementById('anz-training').textContent = training.length;
+    document.getElementById('anz-test').textContent = test.length;
+  }
+
+  // ---------- Modell: ein „Neuron“ je Antwort (Softmax-Regression) ----------
+  let woerterbuch = new Map(), W = [], b = [];
+  function vektor(text) {
+    const idx = merkmale(text).map((m) => woerterbuch.get(m)).filter((i) => i !== undefined);
+    const wert = idx.length ? 1 / Math.sqrt(idx.length) : 0;
+    return { idx, wert };
+  }
+  function wahrscheinlichkeiten(v) {
+    const z = W.map((wk, k) => b[k] + v.idx.reduce((s, i) => s + wk[i] * v.wert, 0));
+    const max = Math.max(...z);
+    const e = z.map((x) => Math.exp(x - max));
+    const summe = e.reduce((s, x) => s + x, 0);
+    return e.map((x) => x / summe);
+  }
+  function vorhersage(text) {
+    const v = vektor(text);
+    if (!v.idx.length) return { k: -1, p: 0 };
+    const p = wahrscheinlichkeiten(v);
+    const k = p.indexOf(Math.max(...p));
+    return { k, p: p[k] };
+  }
+
+  const LERNRATE = 0.5, DAEMPFUNG = 0.01;
+  let verlauf = [];
+
+  async function trainiere() {
+    teileDaten();
+    woerterbuch = new Map();
+    for (const d of training) for (const m of merkmale(d.text)) if (!woerterbuch.has(m)) woerterbuch.set(m, woerterbuch.size);
+    const K = KLASSEN.length, D = woerterbuch.size;
+    W = Array.from({ length: K }, () => new Float64Array(D));
+    b = new Float64Array(K);
+    const daten = training.map((d) => ({ v: vektor(d.text), k: d.k }));
+    const epochen = Number(document.getElementById('epochen').value);
+    verlauf = [];
+    const knopf = document.getElementById('trainieren');
+    knopf.disabled = true;
+    for (let ep = 1; ep <= epochen; ep++) {
+      let fehler = 0;
+      daten.sort(() => Math.random() - 0.5);
+      for (const { v, k } of daten) {
+        const p = wahrscheinlichkeiten(v);
+        fehler -= Math.log(p[k] + 1e-12);
+        for (let c = 0; c < K; c++) {
+          const g = p[c] - (c === k ? 1 : 0);
+          b[c] -= LERNRATE * g;
+          for (const i of v.idx) W[c][i] -= LERNRATE * (g * v.wert + DAEMPFUNG * W[c][i]);
+        }
+      }
+      verlauf.push(fehler / daten.length);
+      if (ep % 5 === 0 || ep === epochen) {
+        document.getElementById('status').textContent =
+          `Epoche ${ep} von ${epochen} · Fehler ${verlauf[verlauf.length - 1].toFixed(3).replace('.', ',')} · ${D} Merkmale gelernt`;
+        zeichneKurve();
+        await new Promise((r) => setTimeout(r, 10));
+      }
+    }
+    knopf.disabled = false;
+    knopf.textContent = 'Neu trainieren';
+    bewerte();
+    zeigeGelerntes();
+    document.getElementById('eingabe').disabled = false;
+    document.getElementById('senden').disabled = false;
+    document.getElementById('eingabe').placeholder = 'Schreib eine Frage …';
+  }
+
+  function zeichneKurve() {
+    const c = document.getElementById('kurve'), g = c.getContext('2d');
+    const farbe = getComputedStyle(document.documentElement).getPropertyValue('--akzent');
+    g.clearRect(0, 0, c.width, c.height);
+    if (verlauf.length < 2) return;
+    const max = Math.max(...verlauf), epochen = Number(document.getElementById('epochen').value);
+    g.strokeStyle = farbe; g.lineWidth = 3; g.beginPath();
+    verlauf.forEach((y, i) => {
+      const px = 10 + (i / Math.max(1, epochen - 1)) * (c.width - 20);
+      const py = c.height - 10 - (y / max) * (c.height - 20);
+      i ? g.lineTo(px, py) : g.moveTo(px, py);
+    });
+    g.stroke();
+  }
+
+  function prozent(x) { return Math.round(x * 100) + ' %'; }
+
+  function bewerte() {
+    const richtig = (liste) => liste.filter((d) => vorhersage(d.text).k === d.k).length;
+    document.getElementById('genau-training').textContent = training.length ? prozent(richtig(training) / training.length) : '–';
+    document.getElementById('genau-test').textContent = test.length ? prozent(richtig(test) / test.length) : '–';
+    const tabelle = document.getElementById('testliste'), tbody = tabelle.querySelector('tbody');
+    tbody.innerHTML = '';
+    for (const d of test) {
+      const v = vorhersage(d.text), ok = v.k === d.k;
+      const tr = document.createElement('tr');
+      for (const text of [d.text, v.k >= 0 ? titel[v.k] : '–', prozent(v.p)]) {
+        const td = document.createElement('td'); td.textContent = text; tr.appendChild(td);
+      }
+      const td = document.createElement('td');
+      td.textContent = ok ? '✓' : '✗'; td.className = ok ? 'ok' : 'falsch';
+      tr.appendChild(td); tbody.appendChild(tr);
+    }
+    tabelle.hidden = !test.length;
+  }
+
+  function zeigeGelerntes() {
+    const ziel = document.getElementById('gelernt');
+    ziel.innerHTML = '';
+    const namen = [...woerterbuch.keys()];
+    KLASSEN.forEach((e, k) => {
+      const top = namen.map((m, i) => [m, W[k][i]]).filter(([m, w]) => m.startsWith('w:') && w > 0)
+        .sort((a, b) => b[1] - a[1]).slice(0, 8);
+      const h = document.createElement('strong'); h.textContent = e.frage; ziel.appendChild(h);
+      const div = document.createElement('div'); div.className = 'woerter';
+      for (const [m] of top) { const s = document.createElement('span'); s.className = 'wort'; s.textContent = m.slice(2); div.appendChild(s); }
+      ziel.appendChild(div);
+    });
+  }
+
+  // ---------- Chat ----------
+  const MINDEST_SICHERHEIT = BOT.mindestSicherheit || 0.5;
+  const chat = document.getElementById('chat');
+  function schreibe(text, wer, info) {
+    const blase = document.createElement('div');
+    blase.className = 'nachricht ' + wer;
+    blase.textContent = text;
+    if (info && document.getElementById('zeige-info').checked) {
+      const s = document.createElement('span'); s.className = 'info'; s.textContent = info; blase.appendChild(s);
+    }
+    chat.appendChild(blase);
+    chat.scrollTop = chat.scrollHeight;
+  }
+  document.getElementById('formular').addEventListener('submit', (e) => {
+    e.preventDefault();
+    const eingabe = document.getElementById('eingabe');
+    const text = eingabe.value.trim();
+    if (!text) return;
+    schreibe(text, 'du');
+    const v = vorhersage(text);
+    const sicher = v.k >= 0 && v.p >= MINDEST_SICHERHEIT;
+    const info = v.k < 0 ? 'kein bekanntes Wort gefunden'
+      : `Sicherheit ${prozent(v.p)} · erkannt als „${titel[v.k]}“` + (sicher ? '' : ' – zu unsicher');
+    setTimeout(() => schreibe(sicher ? antworten[v.k] : BOT.unbekannt, 'bot', info), 300);
+    eingabe.value = '';
+    eingabe.focus();
+  });
+
+  // ---------- Start ----------
+  document.getElementById('titel').textContent = BOT.name + ' mit Training';
+  document.title = BOT.name + ' mit Training';
+  const regler = document.getElementById('epochen');
+  regler.addEventListener('input', () => { document.getElementById('epochen-wert').textContent = regler.value; });
+  document.getElementById('zurueckhalten').addEventListener('change', teileDaten);
+  document.getElementById('trainieren').addEventListener('click', trainiere);
+  teileDaten();
+  schreibe(BOT.begruessung, 'bot');
+</script>
+</body>
+</html>

@@ -8,7 +8,8 @@ zeigt die passende gespeicherte Antwort an (regelbasiert, ohne KI). Läuft im Br
 | Datei | Wozu |
 | --- | --- |
 | `wissen.js` | Name des Bots, Begrüßung und die **Wissensbasis** (Fragen, Stichwörter, Antworten) – nur diese Datei bearbeitet ihr |
-| `index.html` | die Chat-Seite (muss nicht verändert werden) |
+| `index.html` | **Stichwort-Bot:** sucht Stichwörter, ohne Training (muss nicht verändert werden) |
+| `training.html` | **Bot mit Training:** lernt aus Beispielfragen (maschinelles Lernen im Browser) |
 
 > **Wichtig:** Eine GitHub-Pages-Seite ist **für alle im Internet sichtbar** – auch der Inhalt von `wissen.js`.
 > Echte Antworten aus einem Interview kommen erst online, wenn die interviewte Person sie gelesen und
@@ -44,6 +45,26 @@ zeigt die passende gespeicherte Antwort an (regelbasiert, ohne KI). Läuft im Br
 3. Speichern, `index.html` doppelklicken → der Bot läuft im Browser, nur auf diesem PC.
 4. Diese Fassung **nicht hochladen**, bis die Antworten freigegeben sind.
 
+## 5. Bot mit Training (`training.html`)
+
+Statt Stichwörter von Hand festzulegen, **lernt** dieser Bot aus Beispielen:
+
+1. In `wissen.js` bekommt jede Antwort eine Liste `fragen` mit **10–20 verschiedenen Fragen**, wie Leute danach
+   fragen würden (das sind die **Trainingsdaten**).
+2. In `UNBEKANNT_FRAGEN` stehen Fragen, die der Bot **nicht** beantworten soll – daraus lernt er „weiß ich nicht“.
+3. `training.html` öffnen → **Trainieren**. Ein kleines neuronales Netz (ein „Neuron“ je Antwort) lernt, welche
+   Wörter und Buchstabengruppen zu welcher Antwort gehören. Die Kurve zeigt, wie der Fehler sinkt.
+4. Jede 5. Frage wird zurückgehalten (**Testfragen**): Daran seht ihr, wie gut der Bot bei Fragen ist, die er nie
+   gesehen hat. Trainingsgenauigkeit 100 %, Testgenauigkeit viel kleiner? Dann hat er **auswendig gelernt**
+   (Überanpassung) – mehr und vielfältigere Fragen helfen.
+5. Unter „Was hat das Modell gelernt?“ steht, an welchen Wörtern er jede Antwort erkennt.
+
+Das Training läuft nur im Browser, nichts wird verschickt oder gespeichert. Nach dem Neuladen der Seite neu trainieren.
+
+**Repo schon aus der alten Vorlage erstellt?** `training.html` von hier herunterladen (Datei öffnen → Download)
+und im eigenen Repo mit **Add file → Upload files** hochladen. In `wissen.js` die Listen `fragen` und
+`UNBEKANNT_FRAGEN` ergänzen (Muster siehe `wissen.js` hier).
+
 ## Wenn der Bot nicht mehr antwortet
 
 Meist ist in `wissen.js` ein Tippfehler: fehlendes Komma nach `}`, ein Anführungszeichen zu viel oder zu wenig.
@@ -54,3 +75,4 @@ Im Browser **F12 → Konsole** zeigt die Zeile mit dem Fehler.
 - Mehr Stichwörter pro Antwort (auch Synonyme, Tippfehler, Mundart).
 - Mit dem Häkchen „Gefundene Stichwörter anzeigen“ prüfen, warum der Bot so geantwortet hat.
 - Andere fragen lassen: Welche Fragen beantwortet er falsch? Warum?
+- Stichwort-Bot und trainierten Bot mit denselben 10 Fragen vergleichen: Wer trifft öfter?
